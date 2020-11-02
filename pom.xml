@@ -259,6 +259,7 @@
     <profile>
       <id>full-build</id>
       <modules>
+        <module>zookeeper-it</module>
         <module>zookeeper-contrib</module>
         <!-- zookeeper-it needed by fatjar contrib -->
         <module>zookeeper-it</module>
@@ -599,6 +600,11 @@
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-servlet</artifactId>
+        <version>${jetty.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-client</artifactId>
         <version>${jetty.version}</version>
       </dependency>
       <dependency>

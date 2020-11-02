@@ -17,6 +17,10 @@ E.g. setting up python and python devel on ubuntu 18.4:
 sudo apt-get install python2.7 python2.7-dev
 sudo update-alternatives --install /usr/bin/python python /usr/bin/python2.7 1
 
+E.g. setting up tpyhon and python devel on ubuntu 18.4:
+sudo apt-get install python2.7 python2.7-dev
+sudo update-alternatives --install /usr/bin/python python /usr/bin/python2.7 1
+
 BUILD AND INSTALL:
 -------------------
 

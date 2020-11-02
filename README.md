@@ -1,5 +1,23 @@
-# Apache ZooKeeper [![Build Status](https://travis-ci.org/apache/zookeeper.svg?branch=master)](https://travis-ci.org/apache/zookeeper) [![Maven Central](https://img.shields.io/maven-central/v/org.apache.zookeeper/zookeeper)](https://zookeeper.apache.org/releases.html) [![License](https://img.shields.io/github/license/apache/zookeeper)](https://github.com/apache/zookeeper/blob/master/LICENSE.txt)
+# Fadhil's ZooKeeper [![Build Status](https://travis-ci.org/apache/zookeeper.svg?branch=master)](https://travis-ci.org/apache/zookeeper) [![Maven Central](https://img.shields.io/maven-central/v/org.apache.zookeeper/zookeeper)](https://zookeeper.apache.org/releases.html) [![License](https://img.shields.io/github/license/apache/zookeeper)](https://github.com/apache/zookeeper/blob/master/LICENSE.txt)
 ![alt text](https://zookeeper.apache.org/images/zookeeper_small.gif "ZooKeeper")
+
+This is a modified version of ZooKeeper for experimental purpose. 
+
+To run 3 nodes in a single computer, please follow these steps:
+- Build the code using Maven, skip the testing
+```
+mvn clean install -DskipTests
+```
+- Prepare the configuration for 3 nodes in `conf/server1`, `conf/server2`, and `conf/server3` directories. Make sure you set the correct `dataDir` property.
+- Run each node:
+```
+./bin/zkServer.sh --config conf/server1 start-foreground
+./bin/zkServer.sh --config conf/server2 start-foreground
+./bin/zkServer.sh --config conf/server3 start-foreground
+```
+
+
+---------------------------
 
 For the latest information about Apache ZooKeeper, please visit our website at:
 

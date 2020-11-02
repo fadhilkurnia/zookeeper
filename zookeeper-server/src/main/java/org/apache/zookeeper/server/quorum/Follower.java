@@ -161,6 +161,7 @@ public class Follower extends Learner {
             ping(qp);
             break;
         case Leader.PROPOSAL:
+            LOG.info("Get proposal from leader: " + qp.toString());
             ServerMetrics.getMetrics().LEARNER_PROPOSAL_RECEIVED_COUNT.add(1);
             TxnLogEntry logEntry = SerializeUtils.deserializeTxn(qp.getData());
             TxnHeader hdr = logEntry.getHeader();
