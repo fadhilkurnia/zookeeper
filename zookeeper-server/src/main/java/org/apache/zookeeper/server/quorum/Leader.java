@@ -1114,7 +1114,20 @@ public class Leader extends LearnerMaster {
     void sendPacket(QuorumPacket qp) {
         synchronized (forwardingFollowers) {
             for (LearnerHandler f : forwardingFollowers) {
+                LOG.info("Sending QuorumPacket to follower-" + f.sid + ": " + getPacketType(qp.getType()) + " " + qp.toString());
                 f.queuePacket(qp);
+            }
+        }
+    }
+
+    void sendPackets(List<QuorumPacket> packets) {
+        synchronized (forwardingFollowers) {
+            int i = 0;
+            for (LearnerHandler f : forwardingFollowers) {
+                QuorumPacket qp = packets.get(i);
+                LOG.info("Sending QuorumPacket to follower-" + f.sid + ": " + getPacketType(qp.getType()) + " " + qp.toString());
+                f.queuePacket(qp);
+                i++;
             }
         }
     }
@@ -1251,11 +1264,31 @@ public class Leader extends LearnerMaster {
 
             lastProposed = p.packet.getZxid();
             outstandingProposals.put(lastProposed, p);
-            sendPacket(pp);
+            // sendPacket(pp);
+            sendPackets(prepareEncryptedProposal(request));
         }
         ServerMetrics.getMetrics().PROPOSAL_COUNT.add(1);
         return p;
     }
+
+    // TODO: encrypt proposal for each follower
+    List<QuorumPacket> prepareEncryptedProposal(Request request) {
+        List<QuorumPacket> encryptedProposals = new ArrayList<>();
+        for(LearnerHandler f : forwardingFollowers) {
+            LOG.info("modified proposal for " + f.sid);
+            // modifying request for each follower
+            ByteBuffer suffixBB = ByteBuffer.wrap(("[modified]").getBytes());
+            ByteBuffer modifiedBB = ByteBuffer.allocate(request.request.capacity() + suffixBB.capacity())
+                    .put(request.request)
+                    .put(suffixBB);
+            Request modifiedRequest = new Request(request.cnxn, request.sessionId, request.cxid, request.type, modifiedBB, null);
+            byte[] data = SerializeUtils.serializeRequest(modifiedRequest);
+
+            encryptedProposals.add(new QuorumPacket(Leader.PROPOSAL, request.zxid, data, null));
+        }
+        return encryptedProposals;
+    }
+
 
     /**
      * Process sync requests

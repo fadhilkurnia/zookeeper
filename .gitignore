@@ -1,3 +1,7 @@
+# Data and conf directory
+data/*
+#conf/server*/*
+
 # Java
 hs_err_pid*
 zookeeper-server/version-2/*
