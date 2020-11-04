@@ -1,3 +1,6 @@
+data/*
+
+
 # Java
 hs_err_pid*
 zookeeper-server/version-2/*
