@@ -156,6 +156,9 @@ public class Follower extends Learner {
      * @throws IOException
      */
     protected void processPacket(QuorumPacket qp) throws Exception {
+
+        LOG.info("FOLLOWER:receiving-packet: " + Leader.getPacketType(qp.getType()) + ":" + qp.getZxid() + " " + qp.toString());
+
         switch (qp.getType()) {
         case Leader.PING:
             ping(qp);

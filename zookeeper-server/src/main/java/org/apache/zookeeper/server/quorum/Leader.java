@@ -29,18 +29,10 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.SocketException;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
@@ -52,22 +44,26 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import javax.security.sasl.SaslException;
+
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.Serializer;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
+import com.esotericsoftware.kryo.serializers.FieldSerializer;
+import org.apache.commons.lang.SerializationUtils;
 import org.apache.zookeeper.KeeperException;
+import org.apache.zookeeper.Op;
 import org.apache.zookeeper.ZooDefs.OpCode;
 import org.apache.zookeeper.common.Time;
 import org.apache.zookeeper.jmx.MBeanRegistry;
-import org.apache.zookeeper.server.FinalRequestProcessor;
-import org.apache.zookeeper.server.Request;
-import org.apache.zookeeper.server.RequestProcessor;
-import org.apache.zookeeper.server.ServerMetrics;
-import org.apache.zookeeper.server.ZKDatabase;
-import org.apache.zookeeper.server.ZooKeeperCriticalThread;
-import org.apache.zookeeper.server.ZooTrace;
+import org.apache.zookeeper.proto.SetDataRequest;
+import org.apache.zookeeper.server.*;
 import org.apache.zookeeper.server.quorum.QuorumPeer.LearnerType;
 import org.apache.zookeeper.server.quorum.auth.QuorumAuthServer;
 import org.apache.zookeeper.server.quorum.flexible.QuorumVerifier;
 import org.apache.zookeeper.server.util.SerializeUtils;
 import org.apache.zookeeper.server.util.ZxidUtils;
+import org.apache.zookeeper.txn.SetDataTxn;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -94,6 +90,18 @@ public class Leader extends LearnerMaster {
             return packet.getType() + ", " + packet.getZxid() + ", " + request;
         }
 
+    }
+
+    private class RequestSerializer extends FieldSerializer<Request> {
+        public RequestSerializer(Kryo kryo, Class type) {
+            super(kryo, type);
+        }
+
+        public Request copy (Kryo kryo, Request original) {
+            Request copy = new Request(original.cnxn, original.sessionId, original.cxid, original.type, original.request, original.authInfo);
+            kryo.reference(copy);
+            return copy;
+        }
     }
 
     // log ack latency if zxid is a multiple of ackLoggingFrequency. If <=0, disable logging.
@@ -1024,6 +1032,7 @@ public class Leader extends LearnerMaster {
 
         p.addAck(sid);
 
+        LOG.info(">>>>>>> " + p.request.getTxn().toString());
         boolean hasCommitted = tryToCommit(p, zxid, followerAddr);
 
         // If p is a reconfiguration, multiple other operations may be ready to be committed,
@@ -1121,6 +1130,9 @@ public class Leader extends LearnerMaster {
     void sendPacket(QuorumPacket qp) {
         synchronized (forwardingFollowers) {
             for (LearnerHandler f : forwardingFollowers) {
+
+                LOG.info("LEADER:sending-packet:" + f.sid + " " + Leader.getPacketType(qp.getType()) + ":" + qp.getZxid() + " " + qp.toString());
+
                 f.queuePacket(qp);
             }
         }
@@ -1234,10 +1246,30 @@ public class Leader extends LearnerMaster {
         byte[] data = SerializeUtils.serializeRequest(request);
         proposalStats.setLastBufferSize(data.length);
         QuorumPacket pp = new QuorumPacket(Leader.PROPOSAL, request.zxid, data, null);
-
         Proposal p = new Proposal();
         p.packet = pp;
         p.request = request;
+
+        // Fadhil - prepare proposal for followers
+        QuorumPacket quorumPacketForFollowers = pp;
+
+        if (request.type == OpCode.setData) {
+            try {
+                Request requestForFollowers = new Request(request.sessionId, request.cxid, request.type, request.getHdr(), request.getTxn(), request.zxid);//kryo.copy(request);
+
+                // Fadhil - Modifying proposal's content for followers
+                TxnLogEntry txnLogEntry =  SerializeUtils.deserializeTxn(data);
+                SetDataTxn modifiedSetDataTxn = (SetDataTxn) txnLogEntry.getTxn();
+                modifiedSetDataTxn.setData(modifyRequestData(modifiedSetDataTxn.getData()));
+                requestForFollowers.setTxn(modifiedSetDataTxn);
+                byte[] dataForFollowers = SerializeUtils.serializeRequest(requestForFollowers);
+
+                quorumPacketForFollowers = new QuorumPacket(Leader.PROPOSAL, requestForFollowers.zxid, dataForFollowers, null);
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
 
         synchronized (this) {
             p.addQuorumVerifier(self.getQuorumVerifier());
@@ -1250,14 +1282,23 @@ public class Leader extends LearnerMaster {
                 p.addQuorumVerifier(self.getLastSeenQuorumVerifier());
             }
 
-            LOG.debug("Proposing:: {}", request);
+            LOG.info("Proposing:: {}", request);
 
             lastProposed = p.packet.getZxid();
+            LOG.info("xxxxxxxx " + p.request.getTxn().toString());
             outstandingProposals.put(lastProposed, p);
-            sendPacket(pp);
+            sendPacket(quorumPacketForFollowers);
         }
         ServerMetrics.getMetrics().PROPOSAL_COUNT.add(1);
         return p;
+    }
+
+    private byte[] modifyRequestData(byte[] originalData) {
+        byte[] prefix = "[EDITED] ".getBytes();
+        byte[] modifiedData = new byte[prefix.length + originalData.length];
+        System.arraycopy(prefix, 0, modifiedData, 0, prefix.length);
+        System.arraycopy(originalData, 0, modifiedData, prefix.length, originalData.length);
+        return modifiedData;
     }
 
     /**

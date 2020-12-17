@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1548,6 +1549,8 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         BinaryInputArchive bia = BinaryInputArchive.getArchive(bais);
         RequestHeader h = new RequestHeader();
         h.deserialize(bia, "header");
+
+        LOG.info("SERVER:receiving-packet " + ZooDefs.opNames[h.getType()] + " " + new String(incomingBuffer.array(), StandardCharsets.UTF_8));
 
         // Need to increase the outstanding request count first, otherwise
         // there might be a race condition that it enabled recv after

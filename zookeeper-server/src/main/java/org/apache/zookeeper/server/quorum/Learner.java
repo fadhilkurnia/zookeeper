@@ -161,6 +161,9 @@ public class Learner {
     void writePacket(QuorumPacket pp, boolean flush) throws IOException {
         synchronized (leaderOs) {
             if (pp != null) {
+
+                LOG.info("FOLLOWER-LEARNER:sending-packet: " + Leader.getPacketType(pp.getType()) + ":" + pp.getZxid() + " " + pp.toString());
+
                 messageTracker.trackSent(pp.getType());
                 leaderOs.writeRecord(pp, "packet");
             }

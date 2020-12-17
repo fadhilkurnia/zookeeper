@@ -650,6 +650,8 @@ public class LearnerHandler extends ZooKeeperThread {
                 ia.readRecord(qp, "packet");
                 messageTracker.trackReceived(qp.getType());
 
+                LOG.info("LEARNER-HANDLER:receiving-packet: " + Leader.getPacketType(qp.getType()) + ":" + qp.getZxid() + " " + qp.toString());
+
                 long traceMask = ZooTrace.SERVER_PACKET_TRACE_MASK;
                 if (qp.getType() == Leader.PING) {
                     traceMask = ZooTrace.SERVER_PING_TRACE_MASK;
