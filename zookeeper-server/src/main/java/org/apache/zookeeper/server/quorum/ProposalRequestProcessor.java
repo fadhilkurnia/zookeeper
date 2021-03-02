@@ -23,6 +23,7 @@ import org.apache.zookeeper.server.Request;
 import org.apache.zookeeper.server.RequestProcessor;
 import org.apache.zookeeper.server.SyncRequestProcessor;
 import org.apache.zookeeper.server.quorum.Leader.XidRolloverException;
+import org.apache.zookeeper.txn.CreateTxn;
 import org.apache.zookeeper.txn.SetDataTxn;
 import org.jasypt.encryption.pbe.StandardPBEByteEncryptor;
 import org.slf4j.Logger;
@@ -62,12 +63,16 @@ public class ProposalRequestProcessor implements RequestProcessor {
         // request.addRQRec(">prop");
 
         /* In the following IF block, we try to encrypt the data from
-         * setData operation, before proposing it to other followers. We are using
+         * setData and create operation, before proposing it to other followers. We are using
          * symmetric encryption, and assume the key is available from key escrow
          * service. --Fadhil
          */
+        String KEY = "super-secret-key";
         if (request.getTxn() instanceof SetDataTxn) {
-            encryptSetDataRequestContent(request, "super-secret-key");
+            encryptSetDataRequestContent(request, KEY);
+        }
+        if (request.getTxn() instanceof CreateTxn && ((CreateTxn) request.getTxn()).getData() != null) {
+            encryptCreateRequestContent(request, KEY);
         }
 
         /* In the following IF-THEN-ELSE block, we process syncs on the leader.
@@ -100,6 +105,16 @@ public class ProposalRequestProcessor implements RequestProcessor {
         byte[] encryptedData = encryptor.encrypt(setDatTxn.getData());
         setDatTxn.setData(encryptedData);
         request.setTxn(setDatTxn);
+        return request;
+    }
+
+    private Request encryptCreateRequestContent(Request request, String key) {
+        CreateTxn createTxn = (CreateTxn) request.getTxn();
+        StandardPBEByteEncryptor encryptor = new StandardPBEByteEncryptor();
+        encryptor.setPassword(key);
+        byte[] encryptedData = encryptor.encrypt(createTxn.getData());
+        createTxn.setData(encryptedData);
+        request.setTxn(createTxn);
         return request;
     }
 
