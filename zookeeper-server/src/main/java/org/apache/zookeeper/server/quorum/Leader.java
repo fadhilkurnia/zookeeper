@@ -43,8 +43,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import javax.security.sasl.SaslException;
 
-import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.serializers.FieldSerializer;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooDefs.OpCode;
 import org.apache.zookeeper.common.Time;
@@ -56,6 +54,7 @@ import org.apache.zookeeper.server.quorum.flexible.QuorumVerifier;
 import org.apache.zookeeper.server.util.SerializeUtils;
 import org.apache.zookeeper.server.util.ZxidUtils;
 import org.apache.zookeeper.txn.SetDataTxn;
+import org.jasypt.encryption.pbe.StandardPBEByteEncryptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,18 +81,6 @@ public class Leader extends LearnerMaster {
             return packet.getType() + ", " + packet.getZxid() + ", " + request;
         }
 
-    }
-
-    private class RequestSerializer extends FieldSerializer<Request> {
-        public RequestSerializer(Kryo kryo, Class type) {
-            super(kryo, type);
-        }
-
-        public Request copy (Kryo kryo, Request original) {
-            Request copy = new Request(original.cnxn, original.sessionId, original.cxid, original.type, original.request, original.authInfo);
-            kryo.reference(copy);
-            return copy;
-        }
     }
 
     // log ack latency if zxid is a multiple of ackLoggingFrequency. If <=0, disable logging.
@@ -1242,27 +1229,6 @@ public class Leader extends LearnerMaster {
         p.packet = pp;
         p.request = request;
 
-        // Fadhil - prepare proposal for followers
-        QuorumPacket quorumPacketForFollowers = pp;
-
-        if (request.type == OpCode.setData) {
-            try {
-                Request requestForFollowers = new Request(request.sessionId, request.cxid, request.type, request.getHdr(), request.getTxn(), request.zxid);//kryo.copy(request);
-
-                // Fadhil - Modifying proposal's content for followers
-                TxnLogEntry txnLogEntry =  SerializeUtils.deserializeTxn(data);
-                SetDataTxn modifiedSetDataTxn = (SetDataTxn) txnLogEntry.getTxn();
-                modifiedSetDataTxn.setData(modifyRequestData(modifiedSetDataTxn.getData()));
-                requestForFollowers.setTxn(modifiedSetDataTxn);
-                byte[] dataForFollowers = SerializeUtils.serializeRequest(requestForFollowers);
-
-                quorumPacketForFollowers = new QuorumPacket(Leader.PROPOSAL, requestForFollowers.zxid, dataForFollowers, null);
-
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-
         synchronized (this) {
             p.addQuorumVerifier(self.getQuorumVerifier());
 
@@ -1277,20 +1243,11 @@ public class Leader extends LearnerMaster {
             LOG.info("Proposing:: {}", request);
 
             lastProposed = p.packet.getZxid();
-            LOG.info("xxxxxxxx " + p.request.getTxn().toString());
             outstandingProposals.put(lastProposed, p);
-            sendPacket(quorumPacketForFollowers);
+            sendPacket(pp);
         }
         ServerMetrics.getMetrics().PROPOSAL_COUNT.add(1);
         return p;
-    }
-
-    private byte[] modifyRequestData(byte[] originalData) {
-        byte[] prefix = "[EDITED] ".getBytes();
-        byte[] modifiedData = new byte[prefix.length + originalData.length];
-        System.arraycopy(prefix, 0, modifiedData, 0, prefix.length);
-        System.arraycopy(originalData, 0, modifiedData, prefix.length, originalData.length);
-        return modifiedData;
     }
 
     /**

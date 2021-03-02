@@ -163,9 +163,11 @@
       <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>com.esotericsoftware.kryo</groupId>
-      <artifactId>kryo</artifactId>
-      <version>2.24.0</version>
+      <groupId>org.jasypt</groupId>
+      <artifactId>jasypt</artifactId>
+      <version>1.9.3</version>
+      <classifier>lite</classifier>
+      <scope>compile</scope>
     </dependency>
   </dependencies>
 

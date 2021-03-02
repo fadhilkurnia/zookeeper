@@ -18,10 +18,13 @@
 
 package org.apache.zookeeper.server.quorum;
 
+import org.apache.zookeeper.proto.SetDataRequest;
 import org.apache.zookeeper.server.Request;
 import org.apache.zookeeper.server.RequestProcessor;
 import org.apache.zookeeper.server.SyncRequestProcessor;
 import org.apache.zookeeper.server.quorum.Leader.XidRolloverException;
+import org.apache.zookeeper.txn.SetDataTxn;
+import org.jasypt.encryption.pbe.StandardPBEByteEncryptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -58,6 +61,14 @@ public class ProposalRequestProcessor implements RequestProcessor {
         // request.type + " id = " + request.sessionId);
         // request.addRQRec(">prop");
 
+        /* In the following IF block, we try to encrypt the data from
+         * setData operation, before proposing it to other followers. We are using
+         * symmetric encryption, and assume the key is available from key escrow
+         * service. --Fadhil
+         */
+        if (request.getTxn() instanceof SetDataTxn) {
+            encryptSetDataRequestContent(request, "super-secret-key");
+        }
 
         /* In the following IF-THEN-ELSE block, we process syncs on the leader.
          * If the sync is coming from a follower, then the follower
@@ -66,7 +77,6 @@ public class ProposalRequestProcessor implements RequestProcessor {
          * contain the handler. In this case, we add it to syncHandler, and
          * call processRequest on the next processor.
          */
-
         if (request instanceof LearnerSyncRequest) {
             zks.getLeader().processSync((LearnerSyncRequest) request);
         } else {
@@ -81,6 +91,16 @@ public class ProposalRequestProcessor implements RequestProcessor {
                 syncProcessor.processRequest(request);
             }
         }
+    }
+
+    private Request encryptSetDataRequestContent(Request request, String key) {
+        SetDataTxn setDatTxn = (SetDataTxn) request.getTxn();
+        StandardPBEByteEncryptor encryptor = new StandardPBEByteEncryptor();
+        encryptor.setPassword(key);
+        byte[] encryptedData = encryptor.encrypt(setDatTxn.getData());
+        setDatTxn.setData(encryptedData);
+        request.setTxn(setDatTxn);
+        return request;
     }
 
     public void shutdown() {
