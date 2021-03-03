@@ -25,6 +25,9 @@ import org.apache.commons.cli.Parser;
 import org.apache.commons.cli.PosixParser;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.data.Stat;
+import org.jasypt.exceptions.EncryptionOperationNotPossibleException;
+
+import java.util.Arrays;
 
 /**
  * get command for cli
@@ -38,10 +41,11 @@ public class GetCommand extends CliCommand {
     static {
         options.addOption("s", false, "stats");
         options.addOption("w", false, "watch");
+        options.addOption("k", true, "key");
     }
 
     public GetCommand() {
-        super("get", "[-s] [-w] path");
+        super("get", "[-s] [-w] [-k key] path");
     }
 
     @Override
@@ -65,7 +69,7 @@ public class GetCommand extends CliCommand {
 
     private void retainCompatibility(String[] cmdArgs) throws CliParseException {
         // get path [watch]
-        if (args.length > 2) {
+        if (args.length > 2 && !cl.hasOption("k")) {
             // rewrite to option
             cmdArgs[2] = "-w";
             err.println("'get path [watch]' has been deprecated. " + "Please use 'get [-s] [-w] path' instead.");
@@ -84,13 +88,21 @@ public class GetCommand extends CliCommand {
         boolean watch = cl.hasOption("w");
         String path = args[1];
         Stat stat = new Stat();
+        // Fadhil - modified to add key option
+        String key = null;
         byte[] data;
+        if (cl.hasOption("k")) {
+            key = cl.getOptionValue("k");
+        }
         try {
-            data = zk.getData(path, watch, stat);
+            data = zk.getData(path, watch, stat, key);
         } catch (IllegalArgumentException ex) {
             throw new MalformedPathException(ex.getMessage());
         } catch (KeeperException | InterruptedException ex) {
             throw new CliException(ex);
+        } catch (EncryptionOperationNotPossibleException ex) {
+            err.println("can not decrypt data!");
+            data = null;
         }
         data = (data == null) ? "null".getBytes() : data;
         out.println(new String(data));

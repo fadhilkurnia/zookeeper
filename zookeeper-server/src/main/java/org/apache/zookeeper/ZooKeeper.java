@@ -87,6 +87,8 @@ import org.apache.zookeeper.proto.SyncResponse;
 import org.apache.zookeeper.server.DataTree;
 import org.apache.zookeeper.server.EphemeralType;
 import org.apache.zookeeper.server.watch.PathParentIterator;
+import org.jasypt.encryption.pbe.StandardPBEByteEncryptor;
+import org.jasypt.exceptions.EncryptionOperationNotPossibleException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -2383,6 +2385,16 @@ public class ZooKeeper implements AutoCloseable {
      */
     public byte[] getData(String path, boolean watch, Stat stat) throws KeeperException, InterruptedException {
         return getData(path, watch ? watchManager.defaultWatcher : null, stat);
+    }
+
+    // getData with decryption key. Decrypt data if key given. --Fadhil
+    public byte[] getData(String path, boolean watch, Stat stat, String key) throws KeeperException, InterruptedException, EncryptionOperationNotPossibleException {
+        if (key != null) {
+            StandardPBEByteEncryptor encryptor = new StandardPBEByteEncryptor();
+            encryptor.setPassword(key);
+            return encryptor.decrypt(getData(path, watch, stat));
+        }
+        return getData(path, watch, stat);
     }
 
     /**
